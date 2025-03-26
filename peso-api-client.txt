@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+"""
+Peso API Client
+A Python client for the Peso API
+"""
+
+import requests
+import json
+import time
+import logging
+from typing import Dict, List, Any, Optional, Union
+
+class PesoAPIClient:
+    """Client for interacting with the Peso API"""
+    
+    def __init__(self, base_url: str = "http://localhost:8000", api_key: Optional[str] = None):
+        """
+        Initialize the API client
+        
+        Args:
+            base_url: Base URL of the Peso API
+            api_key: Optional API key for authentication
+        """
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.session = requests.Session()
+        
+        # Add API key to headers if provided
+        if api_key:
+            self.session.headers.update({"X-API-Key": api_key})
+        
+        # Setup logging
+        self.logger = logging.getLogger("peso-api-client")
+        
+    def _make_request(self, method: str, endpoint: str, 
+                     params: Dict[str, Any] = None,
+                     data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Make a request to the API
+        
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            endpoint: API endpoint
+            params: Query parameters
+            data: Request body data
+            
+        Returns:
+            Response data as dictionary
+        """
+        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        
+        try:
+            if method.upper() == "GET":
+                response = self.session.get(url, params=params)
+            elif method.upper() == "POST":
+                response = self.session.post(url, json=data, params=params)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+            
+            # Check for HTTP errors
+            response.raise_for_status()
+            
+            # Return response data
+            return response.json()
+        
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"API request error: {e}")
+            
+            # Try to get error details from response
+            try:
+                error_data = response.json()
+                if "detail" in error_data:
+                    raise Exception(f"API error: {error_data['detail']}")
+                else:
+                    raise Exception(f"API error: {error_data}")
+            except json.JSONDecodeError:
+                # Fall back to status code if response isn't JSON
+                raise Exception(f"API error: HTTP {response.status_code}")
+        
+        except Exception as e:
+            self.logger.error(f"API client error: {e}")
+            raise
+    
+    # Dataset endpoints
+    
+    def list_datasets(self, name: Optional[str] = None, 
+                    data_type: Optional[str] = None) -> Dict[str, Any]:
+        """
+        List all datasets with optional filtering
+        
+        Args:
+            name: Filter by name
+            data_type: Filter by type
+            
+        Returns:
+            Dictionary with datasets list
+        """
+        params = {}
+        if name:
+            params["name"] = name
+        if data_type:
+            params["type"] = data_type
+            
+        return self._make_request("GET", "/datasets", params=params)
+    
+    def get_dataset(self, dataset_id: int, version: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Get a specific dataset
+        
+        Args:
+            dataset_id: Dataset ID
+            version: Optional version number
+            
+        Returns:
+            Dataset details
+        """
+        params = {}
+        if version is not None:
+            params["version"] = version
+            
+        return self._make_request("GET", f"/datasets/{dataset_id}", params=params)
+    
+    def create_dataset(self, name: str, data_type: str, 
+                     synthetic_count: int = 100) -> Dict[str, Any]:
+        """
+        Create a new dataset
+        
+        Args:
+            name: Dataset name
+            data_type: Dataset type (human, non-human, mixed)
+            synthetic_count: Number of synthetic records
+            
+        Returns:
+            Creation details with dataset ID
+        """
+        data = {
+            "name": name,
+            "data_type": data_type,
+            "synthetic_count": synthetic_count
+        }
+        
+        return self._make_request("POST", "/datasets", data=data)
+    
+    def enrich_dataset(self, dataset_id: int, ai_tool: str = "openai") -> Dict[str, Any]:
+        """
+        Enrich a dataset using AI
+        
+        Args:
+            dataset_id: Dataset ID
+            ai_tool: AI tool to use
+            
+        Returns:
+            Task details
+        """
+        data = {
+            "dataset_id": dataset_id,
+            "ai_tool": ai_tool
+        }
+        
+        return self._make_request("POST", "/datasets/enrich", data=data)
+    
+    def analyze_dataset(self, dataset_id: int) -> Dict[str, Any]:
+        """
+        Analyze a dataset
+        
+        Args:
+            dataset_id: Dataset ID
+            
+        Returns:
+            Task details
+        """
+        return self._make_request("GET", f"/datasets/{dataset_id}/analyze")
+    
+    # ML endpoints
+    
+    def train_model(self, dataset_id: int, target_column: str,
+                  model_type: str = "classifier", 
+                  features: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Train a machine learning model
+        
+        Args:
+            dataset_id: Dataset ID
+            target_column: Column to predict
+            model_type: Model type (classifier/regressor)
+            features: Feature columns
+            
+        Returns:
+            Task details
+        """
+        data = {
+            "dataset_id": dataset_id,
+            "target_column": target_column,
+            "model_type": model_type
+        }
+        
+        if features:
+            data["features"] = features
+            
+        return self._make_request("POST", "/ml/train", data=data)
+    
+    def predict(self, model_name: str, data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Make predictions with a trained model
+        
+        Args:
+            model_name: Model name
+            data: Data to make predictions on
+            
+        Returns:
+            Predictions
+        """
+        request_data = {
+            "model_name": model_name,
+            "data": data
+        }
+        
+        return self._make_request("POST", "/ml/predict", data=request_data)
+    
+    def list_models(self) -> Dict[str, Any]:
+        """
+        List all trained models
+        
+        Returns:
+            Dictionary with models list
+        """
+        return self._make_request("GET", "/models")
+    
+    def get_model_info(self, model_name: str) -> Dict[str, Any]:
+        """
+        Get information about a specific model
+        
+        Args:
+            model_name: Model name
+            
+        Returns:
+            Model information
+        """
+        return self._make_request("GET", f"/models/{model_name}")
+    
+    # Query endpoints
+    
+    def query_data(self, dataset_id: Optional[int] = None, 
+                 filters: Dict[str, Any] = None,
+                 group_by: Optional[str] = None,
+                 aggregations: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
+        """
+        Query data with flexible criteria
+        
+        Args:
+            dataset_id: Dataset ID (optional)
+            filters: Filter criteria
+            group_by: Field to group by
+            aggregations: Aggregation specifications
+            
+        Returns:
+            Query results
+        """
+        data = {
+            "filters": filters or {}
+        }
+        
+        if dataset_id is not None:
+            data["dataset_id"] = dataset_id
+            
+        if group_by:
+            data["group_by"] = group_by
+            
+        if aggregations:
+            data["aggregations"] = aggregations
+            
+        return self._make_request("POST", "/query", data=data)
+
+# Example usage
+if __name__ == "__main__":
+    # Configure logging
+    logging.basicConfig(level=logging.INFO)
+    
+    # Create client
+    client = PesoAPIClient(base_url="http://localhost:8000", api_key="YOUR_API_KEY")
+    
+    try:
+        # Check API status
+        status = client._make_request("GET", "/")
+        print(f"API Status: {status['status']}")
+        
+        # Create a dataset
+        dataset = client.create_dataset(
+            name="Test Dataset",
+            data_type="non-human",
+            synthetic_count=50
+        )
+        dataset_id = dataset["dataset_id"]
+        print(f"Created dataset with ID: {dataset_id}")
+        
+        # List datasets
+        datasets = client.list_datasets()
+        print(f"Found {datasets['count']} datasets")
+        
+        # Analyze dataset
+        analysis_task = client.analyze_dataset(dataset_id)
+        print(f"Started analysis task: {analysis_task['task_id']}")
+        
+        # Train a model
+        training_task = client.train_model(
+            dataset_id=dataset_id,
+            target_column="industry",
+            model_type="classifier"
+        )
+        print(f"Started training task: {training_task['task_id']}")
+        
+        # Wait a bit for training to complete (in a real app, would check task status)
+        print("Waiting for training to complete...")
+        time.sleep(10)
+        
+        # List models
+        models = client.list_models()
+        print(f"Found {models['count']} models")
+        
+        if models['count'] > 0:
+            model_name = models['models'][0]['model_name']
+            
+            # Make predictions
+            predictions = client.predict(
+                model_name=model_name,
+                data=[
+                    {"country": "USA", "email": "test@example.com"},
+                    {"country": "UK", "email": "uk@example.com"}
+                ]
+            )
+            print(f"Made {len(predictions['predictions'])} predictions")
+        
+    except Exception as e:
+        print(f"Error: {e}")

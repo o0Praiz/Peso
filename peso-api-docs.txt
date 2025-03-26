@@ -1,0 +1,526 @@
+openapi: 3.0.0
+info:
+  title: Peso API
+  description: API for the Peso Marketing Data Warehouse
+  version: 0.6.0
+  contact:
+    name: Peso Project Team
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+  - url: https://api.peso-project.com
+    description: Production server
+
+security:
+  - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  
+  schemas:
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Error details
+    
+    Dataset:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Dataset ID
+        name:
+          type: string
+          description: Dataset name
+        type:
+          type: string
+          description: Dataset type
+        source:
+          type: string
+          description: Dataset source
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        last_updated:
+          type: string
+          format: date-time
+          description: Last update timestamp
+        metadata:
+          type: object
+          description: Additional metadata
+    
+    DatasetCreate:
+      type: object
+      required:
+        - name
+        - data_type
+      properties:
+        name:
+          type: string
+          description: Name of the dataset
+        data_type:
+          type: string
+          description: Type of dataset (human, non-human, mixed)
+        synthetic_count:
+          type: integer
+          default: 100
+          description: Number of synthetic records to generate
+    
+    DatasetEnrich:
+      type: object
+      required:
+        - dataset_id
+      properties:
+        dataset_id:
+          type: integer
+          description: ID of the dataset to enrich
+        ai_tool:
+          type: string
+          default: openai
+          description: AI tool to use for enrichment
+    
+    MLModelTrain:
+      type: object
+      required:
+        - dataset_id
+        - target_column
+      properties:
+        dataset_id:
+          type: integer
+          description: ID of the dataset
+        target_column:
+          type: string
+          description: Column to predict
+        model_type:
+          type: string
+          default: classifier
+          enum: [classifier, regressor]
+          description: Type of model
+        features:
+          type: array
+          items:
+            type: string
+          description: List of feature columns
+    
+    PredictionRequest:
+      type: object
+      required:
+        - model_name
+        - data
+      properties:
+        model_name:
+          type: string
+          description: Name of the trained model
+        data:
+          type: array
+          items:
+            type: object
+          description: Data to make predictions on
+    
+    QueryRequest:
+      type: object
+      properties:
+        dataset_id:
+          type: integer
+          description: Dataset ID to query
+        filters:
+          type: object
+          description: Filter criteria
+        group_by:
+          type: string
+          description: Field to group by
+        aggregations:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              function:
+                type: string
+                enum: [avg, sum, min, max, count]
+
+paths:
+  /:
+    get:
+      summary: API root endpoint
+      operationId: root
+      responses:
+        '200':
+          description: API information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  version:
+                    type: string
+                  status:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+  
+  /health:
+    get:
+      summary: Health check endpoint
+      operationId: health_check
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+        '503':
+          description: Service not initialized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /datasets:
+    get:
+      summary: List all datasets
+      operationId: list_datasets
+      parameters:
+        - name: name
+          in: query
+          description: Filter by name
+          required: false
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: Filter by type
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of datasets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  datasets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Dataset'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    post:
+      summary: Create a new dataset
+      operationId: create_dataset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasetCreate'
+      responses:
+        '200':
+          description: Dataset created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dataset_id:
+                    type: integer
+                  message:
+                    type: string
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /datasets/{dataset_id}:
+    get:
+      summary: Get a specific dataset
+      operationId: get_dataset
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: version
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Dataset details
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          description: Dataset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /datasets/enrich:
+    post:
+      summary: Enrich a dataset using AI
+      operationId: enrich_dataset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasetEnrich'
+      responses:
+        '200':
+          description: Enrichment task started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_id:
+                    type: string
+                  message:
+                    type: string
+                  status:
+                    type: string
+        '404':
+          description: Dataset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /datasets/{dataset_id}/analyze:
+    get:
+      summary: Analyze a dataset
+      operationId: analyze_dataset
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Analysis task started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_id:
+                    type: string
+                  message:
+                    type: string
+                  status:
+                    type: string
+        '404':
+          description: Dataset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /ml/train:
+    post:
+      summary: Train a machine learning model
+      operationId: train_model
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MLModelTrain'
+      responses:
+        '200':
+          description: Training task started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_id:
+                    type: string
+                  message:
+                    type: string
+                  status:
+                    type: string
+        '404':
+          description: Dataset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /ml/predict:
+    post:
+      summary: Make predictions with a trained model
+      operationId: predict
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PredictionRequest'
+      responses:
+        '200':
+          description: Predictions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  model_name:
+                    type: string
+                  record_count:
+                    type: integer
+                  predictions:
+                    type: array
+                    items:
+                      type: object
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /query:
+    post:
+      summary: Query data with flexible criteria
+      operationId: query_data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+      responses:
+        '200':
+          description: Query results
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /models:
+    get:
+      summary: List all trained models
+      operationId: list_models
+      responses:
+        '200':
+          description: List of models
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  models:
+                    type: array
+                    items:
+                      type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /models/{model_name}:
+    get:
+      summary: Get information about a model
+      operationId: get_model_info
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Model information
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          description: Model not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
