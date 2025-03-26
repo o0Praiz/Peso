@@ -1,0 +1,425 @@
+#!/usr/bin/env python3
+"""
+Unit Tests for Peso Project Modules
+"""
+
+import unittest
+import os
+import json
+import tempfile
+import shutil
+from datetime import datetime
+
+# Import Peso modules
+# Note: These imports will work once the package is properly installed
+# For development, you may need to adjust import paths
+try:
+    from database.peso_database_module import PesoDatabase
+    from data_collection.peso_data_collection import DataCollector
+    from query.peso_query_module import QueryEngine
+    from insights.peso_insights_generation import InsightsEngine
+    from ml.peso_ml_prediction import MLPredictionEngine
+    from integration.peso_integration_module import PesoIntegration
+except ImportError:
+    # Alternative import paths for direct testing
+    from peso_database_module import PesoDatabase
+    from peso_data_collection import DataCollector
+    from peso_query_module import QueryEngine
+    from peso_insights_generation import InsightsEngine
+    from peso_ml_prediction import MLPredictionEngine
+    from peso_integration_module import PesoIntegration
+
+
+class TestPesoDatabaseModule(unittest.TestCase):
+    """Test cases for the database module"""
+    
+    def setUp(self):
+        """Set up test database"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.temp_dir, "test_db.sqlite")
+        self.db = PesoDatabase(self.db_path)
+    
+    def tearDown(self):
+        """Clean up after tests"""
+        shutil.rmtree(self.temp_dir)
+    
+    def test_add_dataset(self):
+        """Test adding a dataset"""
+        # Add a test dataset
+        dataset_id = self.db.add_dataset(
+            name="Test Dataset",
+            data_type="non-human",
+            source="test",
+            metadata={"test": True}
+        )
+        
+        # Verify dataset was added
+        self.assertGreater(dataset_id, 0, "Dataset ID should be positive")
+        
+        # Get the dataset
+        dataset = self.db.get_dataset(dataset_id)
+        
+        # Verify dataset properties
+        self.assertIsNotNone(dataset, "Dataset should not be None")
+        self.assertEqual(dataset['metadata']['name'], "Test Dataset")
+        self.assertEqual(dataset['metadata']['type'], "non-human")
+    
+    def test_add_dataset_version(self):
+        """Test adding a dataset version"""
+        # Add a test dataset
+        dataset_id = self.db.add_dataset(
+            name="Version Test",
+            data_type="test",
+        )
+        
+        # Add test data
+        test_data = [
+            {"id": 1, "name": "Test 1"},
+            {"id": 2, "name": "Test 2"}
+        ]
+        
+        # Add a version
+        version = self.db.add_dataset_version(dataset_id, test_data)
+        
+        # Verify version was added
+        self.assertEqual(version, 1, "First version should be 1")
+        
+        # Get the dataset with version
+        dataset = self.db.get_dataset(dataset_id, version)
+        
+        # Verify data
+        self.assertIsNotNone(dataset, "Dataset should not be None")
+        self.assertEqual(len(dataset['data']), 2, "Dataset should have 2 records")
+        self.assertEqual(dataset['data'][0]['name'], "Test 1")
+
+
+class TestDataCollectionModule(unittest.TestCase):
+    """Test cases for the data collection module"""
+    
+    def setUp(self):
+        """Set up test database and collector"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.temp_dir, "test_db.sqlite")
+        self.db = PesoDatabase(self.db_path)
+        self.collector = DataCollector(self.db)
+    
+    def tearDown(self):
+        """Clean up after tests"""
+        shutil.rmtree(self.temp_dir)
+    
+    def test_generate_synthetic_data(self):
+        """Test generating synthetic data"""
+        # Generate test data
+        data = self.collector.generate_synthetic_data("non-human", 10)
+        
+        # Verify data was generated
+        self.assertEqual(len(data), 10, "Should generate 10 records")
+        self.assertEqual(data[0]['data_type'], "non-human")
+    
+    def test_process_and_store_data(self):
+        """Test processing and storing data"""
+        # Generate test data
+        data = self.collector.generate_synthetic_data("non-human", 5)
+        
+        # Process and store
+        dataset_id = self.collector.process_and_store_data(
+            data, "Synthetic Test", "non-human"
+        )
+        
+        # Verify data was stored
+        self.assertGreater(dataset_id, 0, "Dataset ID should be positive")
+        
+        # Get the dataset
+        dataset = self.db.get_dataset(dataset_id)
+        
+        # Verify data
+        self.assertIsNotNone(dataset, "Dataset should not be None")
+        self.assertEqual(len(dataset['data']), 5, "Dataset should have 5 records")
+
+
+class TestQueryModule(unittest.TestCase):
+    """Test cases for the query module"""
+    
+    def setUp(self):
+        """Set up test database and query engine"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.temp_dir, "test_db.sqlite")
+        self.db = PesoDatabase(self.db_path)
+        self.query_engine = QueryEngine(self.db)
+        
+        # Add a test dataset
+        self.dataset_id = self.db.add_dataset(
+            name="Query Test",
+            data_type="test",
+        )
+        
+        # Add test data
+        test_data = [
+            {"id": 1, "country": "USA", "industry": "Tech"},
+            {"id": 2, "country": "UK", "industry": "Finance"},
+            {"id": 3, "country": "USA", "industry": "Healthcare"}
+        ]
+        
+        self.db.add_dataset_version(self.dataset_id, test_data)
+    
+    def tearDown(self):
+        """Clean up after tests"""
+        shutil.rmtree(self.temp_dir)
+    
+    def test_query_datasets(self):
+        """Test querying datasets"""
+        # Query all datasets
+        datasets = self.query_engine.query_datasets()
+        
+        # Verify query results
+        self.assertEqual(len(datasets), 1, "Should have 1 dataset")
+        self.assertEqual(datasets[0]['name'], "Query Test")
+    
+    def test_search_dataset_contents(self):
+        """Test searching within a dataset"""
+        # Search for records with country=USA
+        results = self.query_engine.search_dataset_contents(
+            self.dataset_id, {"country": "USA"}
+        )
+        
+        # Verify search results
+        self.assertEqual(len(results), 2, "Should find 2 records")
+        self.assertEqual(results[0]["industry"], "Tech")
+        self.assertEqual(results[1]["industry"], "Healthcare")
+    
+    def test_advanced_query(self):
+        """Test advanced query capabilities"""
+        # Create an advanced query
+        query_spec = {
+            "dataset_id": self.dataset_id,
+            "content_search": {"country": "USA"},
+            "group_by": "industry"
+        }
+        
+        # Execute query
+        results = self.query_engine.advanced_query(query_spec)
+        
+        # Verify results
+        self.assertIn("records", results)
+        self.assertEqual(len(results["records"]), 2, "Should find 2 records")
+        self.assertEqual(results["metrics"]["total_records"], 2)
+
+
+class TestInsightsModule(unittest.TestCase):
+    """Test cases for the insights module"""
+    
+    def setUp(self):
+        """Set up test environment"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.temp_dir, "test_db.sqlite")
+        self.db = PesoDatabase(self.db_path)
+        self.query_engine = QueryEngine(self.db)
+        self.insights_engine = InsightsEngine(self.db, self.query_engine)
+        
+        # Add a test dataset
+        self.dataset_id = self.db.add_dataset(
+            name="Insights Test",
+            data_type="non-human",
+        )
+        
+        # Add test data with numeric values for analysis
+        test_data = []
+        for i in range(50):
+            test_data.append({
+                "id": i,
+                "value": i * 2,
+                "category": "A" if i < 30 else "B",
+                "country": "USA" if i % 3 == 0 else "UK" if i % 3 == 1 else "Germany"
+            })
+        
+        self.db.add_dataset_version(self.dataset_id, test_data)
+    
+    def tearDown(self):
+        """Clean up after tests"""
+        shutil.rmtree(self.temp_dir)
+    
+    def test_generate_dataset_summary(self):
+        """Test generating dataset summary"""
+        summary = self.insights_engine.generate_dataset_summary(self.dataset_id)
+        
+        # Verify summary
+        self.assertIn("dataset_info", summary)
+        self.assertEqual(summary["dataset_info"]["record_count"], 50)
+        self.assertIn("numeric_statistics", summary)
+        self.assertIn("value", summary["numeric_statistics"])
+        self.assertIn("categorical_statistics", summary)
+        self.assertIn("category", summary["categorical_statistics"])
+    
+    def test_detect_anomalies(self):
+        """Test anomaly detection"""
+        # Add an anomaly to the dataset
+        dataset = self.db.get_dataset(self.dataset_id)
+        data = dataset["data"]
+        data.append({"id": 999, "value": 1000, "category": "A", "country": "USA"})
+        self.db.add_dataset_version(self.dataset_id, data)
+        
+        # Detect anomalies
+        anomalies = self.insights_engine.detect_anomalies(
+            self.dataset_id, ["value"], 3.0, 2
+        )
+        
+        # Verify anomalies were detected
+        self.assertIn("anomalies", anomalies)
+        self.assertIn("value", anomalies["anomalies"])
+        self.assertGreater(anomalies["anomalies"]["value"]["count"], 0)
+
+
+class TestMLModule(unittest.TestCase):
+    """Test cases for the ML module"""
+    
+    def setUp(self):
+        """Set up test environment"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.temp_dir, "test_db.sqlite")
+        self.models_dir = os.path.join(self.temp_dir, "models")
+        if not os.path.exists(self.models_dir):
+            os.makedirs(self.models_dir)
+            
+        self.db = PesoDatabase(self.db_path)
+        self.ml_engine = MLPredictionEngine(self.db, self.models_dir)
+        
+        # Add a test dataset
+        self.dataset_id = self.db.add_dataset(
+            name="ML Test",
+            data_type="test",
+        )
+        
+        # Add test data suitable for ML
+        test_data = []
+        for i in range(100):
+            test_data.append({
+                "feature1": i,
+                "feature2": i * 2,
+                "target_class": "A" if i < 50 else "B",
+                "target_value": i * 3
+            })
+        
+        self.db.add_dataset_version(self.dataset_id, test_data)
+    
+    def tearDown(self):
+        """Clean up after tests"""
+        shutil.rmtree(self.temp_dir)
+    
+    def test_train_classifier(self):
+        """Test training a classifier"""
+        # Train classifier
+        model_info = self.ml_engine.train_classifier(
+            self.dataset_id, 
+            "target_class",
+            ["feature1", "feature2"]
+        )
+        
+        # Verify model creation
+        self.assertNotIn("error", model_info)
+        self.assertIn("model_name", model_info)
+        self.assertIn("metrics", model_info)
+        self.assertIn("accuracy", model_info["metrics"])
+    
+    def test_train_regressor(self):
+        """Test training a regressor"""
+        # Train regressor
+        model_info = self.ml_engine.train_regressor(
+            self.dataset_id,
+            "target_value",
+            ["feature1", "feature2"]
+        )
+        
+        # Verify model creation
+        self.assertNotIn("error", model_info)
+        self.assertIn("model_name", model_info)
+        self.assertIn("metrics", model_info)
+        self.assertIn("rmse", model_info["metrics"])
+    
+    def test_predict(self):
+        """Test making predictions"""
+        # Train a classifier
+        model_info = self.ml_engine.train_classifier(
+            self.dataset_id,
+            "target_class",
+            ["feature1", "feature2"]
+        )
+        
+        # Make predictions
+        new_data = [
+            {"feature1": 10, "feature2": 20},
+            {"feature1": 60, "feature2": 120}
+        ]
+        
+        predictions = self.ml_engine.predict(model_info["model_name"], new_data)
+        
+        # Verify predictions
+        self.assertEqual(len(predictions), 2)
+        self.assertEqual(predictions[0], "A")
+        self.assertEqual(predictions[1], "B")
+
+
+class TestIntegrationModule(unittest.TestCase):
+    """Test cases for the integration module"""
+    
+    def setUp(self):
+        """Set up test environment"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.config = {
+            "database": {
+                "path": os.path.join(self.temp_dir, "test_db.sqlite")
+            },
+            "ml": {
+                "models_dir": os.path.join(self.temp_dir, "models")
+            }
+        }
+        
+        # Create config file
+        config_path = os.path.join(self.temp_dir, "config.json")
+        with open(config_path, 'w') as f:
+            json.dump(self.config, f)
+        
+        # Initialize integration with config
+        self.integration = PesoIntegration(config_path)
+    
+    def tearDown(self):
+        """Clean up after tests"""
+        shutil.rmtree(self.temp_dir)
+    
+    def test_collect_and_process_data(self):
+        """Test collecting and processing data"""
+        dataset_id = self.integration.collect_and_process_data(
+            name="Integration Test",
+            data_type="non-human",
+            synthetic_count=20
+        )
+        
+        # Verify dataset creation
+        self.assertGreater(dataset_id, 0)
+        
+        # Get dataset
+        dataset = self.integration.db.get_dataset(dataset_id)
+        
+        # Verify dataset
+        self.assertEqual(len(dataset["data"]), 20)
+        self.assertEqual(dataset["metadata"]["name"], "Integration Test")
+    
+    def test_analyze_dataset(self):
+        """Test analyzing a dataset"""
+        # Create a dataset
+        dataset_id = self.integration.collect_and_process_data(
+            name="Analysis Test",
+            data_type="non-human",
+            synthetic_count=30
+        )
+        
+        # Analyze the dataset
+        analysis = self.integration.analyze_dataset(dataset_id)
+        
+        # Verify analysis
+        self.assertIn("summary", analysis)
+        self.assertIn("anomalies", analysis)
+        self.assertIn("marketing_insights", analysis)
+
+
+if __name__ == "__main__":
+    unittest.main()
