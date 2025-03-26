@@ -1,0 +1,410 @@
+#!/usr/bin/env python3
+"""
+Peso Database Encryption Module
+Provides encryption capabilities for sensitive data in the Peso database
+"""
+
+import os
+import json
+import logging
+from typing import Dict, List, Any, Optional, Union
+import sqlite3
+import base64
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.backends import default_backend
+
+class DatabaseEncryption:
+    """Encryption utilities for the Peso database"""
+    
+    def __init__(self, encryption_key: Optional[str] = None, config: Dict[str, Any] = None):
+        """
+        Initialize the database encryption module
+        
+        Args:
+            encryption_key: Base encryption key (if None, generated or loaded from config)
+            config: Configuration dictionary
+        """
+        self.logger = logging.getLogger(__name__)
+        self.config = config or {}
+        
+        # Load or generate encryption key
+        self.encryption_key = self._setup_encryption_key(encryption_key)
+        
+        # Initialize Fernet cipher for symmetric encryption
+        self.cipher = Fernet(self.encryption_key)
+    
+    def _setup_encryption_key(self, provided_key: Optional[str] = None) -> bytes:
+        """
+        Set up the encryption key (generate, load from file, or use provided)
+        
+        Args:
+            provided_key: Key provided during initialization
+            
+        Returns:
+            Encryption key as bytes
+        """
+        # Check if key is directly provided
+        if provided_key:
+            try:
+                # Decode if it's base64 encoded
+                key = base64.urlsafe_b64decode(provided_key)
+                # Check if it's a valid Fernet key (should be 32 bytes)
+                if len(key) != 32:
+                    raise ValueError("Invalid key length")
+                return base64.urlsafe_b64encode(key)
+            except Exception as e:
+                self.logger.error(f"Provided encryption key is invalid: {e}")
+                # Fall through to other methods
+        
+        # Check if key file is specified in config
+        key_file = self.config.get('security', {}).get('encryption_key_file')
+        if key_file and os.path.exists(key_file):
+            try:
+                with open(key_file, 'rb') as f:
+                    key_data = f.read()
+                    return key_data
+            except Exception as e:
+                self.logger.error(f"Failed to load encryption key from file: {e}")
+                # Fall through to generation
+        
+        # Generate a new key
+        self.logger.info("Generating new encryption key")
+        key = Fernet.generate_key()
+        
+        # Save to file if path is specified
+        if key_file:
+            try:
+                key_dir = os.path.dirname(key_file)
+                if key_dir and not os.path.exists(key_dir):
+                    os.makedirs(key_dir)
+                
+                with open(key_file, 'wb') as f:
+                    f.write(key)
+                self.logger.info(f"Saved new encryption key to {key_file}")
+            except Exception as e:
+                self.logger.error(f"Failed to save encryption key to file: {e}")
+        
+        return key
+    
+    def derive_key_from_password(self, password: str, salt: Optional[bytes] = None) -> Dict[str, bytes]:
+        """
+        Derive encryption key from password
+        
+        Args:
+            password: User password
+            salt: Salt for key derivation (if None, a new one is generated)
+            
+        Returns:
+            Dictionary with derived key and salt
+        """
+        if salt is None:
+            salt = os.urandom(16)
+        
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+            backend=default_backend()
+        )
+        
+        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+        
+        return {
+            'key': key,
+            'salt': salt
+        }
+    
+    def encrypt_value(self, value: str) -> str:
+        """
+        Encrypt a string value
+        
+        Args:
+            value: String value to encrypt
+            
+        Returns:
+            Encrypted value as base64 string
+        """
+        if not value:
+            return value
+        
+        try:
+            encrypted_data = self.cipher.encrypt(value.encode())
+            return base64.urlsafe_b64encode(encrypted_data).decode()
+        except Exception as e:
+            self.logger.error(f"Encryption error: {e}")
+            # Return original value if encryption fails
+            return value
+    
+    def decrypt_value(self, encrypted_value: str) -> str:
+        """
+        Decrypt an encrypted string value
+        
+        Args:
+            encrypted_value: Encrypted string value
+            
+        Returns:
+            Decrypted string
+        """
+        if not encrypted_value:
+            return encrypted_value
+        
+        try:
+            decoded_data = base64.urlsafe_b64decode(encrypted_value)
+            decrypted_data = self.cipher.decrypt(decoded_data)
+            return decrypted_data.decode()
+        except Exception as e:
+            self.logger.error(f"Decryption error: {e}")
+            # Return original value if decryption fails
+            return encrypted_value
+    
+    def encrypt_dict(self, data: Dict[str, Any], sensitive_fields: List[str]) -> Dict[str, Any]:
+        """
+        Encrypt sensitive fields in a dictionary
+        
+        Args:
+            data: Dictionary to encrypt
+            sensitive_fields: List of field names to encrypt
+            
+        Returns:
+            Dictionary with encrypted fields
+        """
+        if not data or not sensitive_fields:
+            return data
+        
+        encrypted_data = data.copy()
+        
+        for field in sensitive_fields:
+            if field in encrypted_data and isinstance(encrypted_data[field], str):
+                encrypted_data[field] = self.encrypt_value(encrypted_data[field])
+                # Add marker to indicate field is encrypted
+                encrypted_data[f"_{field}_encrypted"] = True
+        
+        return encrypted_data
+    
+    def decrypt_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Decrypt all encrypted fields in a dictionary
+        
+        Args:
+            data: Dictionary with encrypted fields
+            
+        Returns:
+            Dictionary with decrypted fields
+        """
+        if not data:
+            return data
+        
+        decrypted_data = data.copy()
+        
+        # Find fields marked as encrypted
+        encrypted_fields = []
+        for field in list(decrypted_data.keys()):
+            if field.endswith('_encrypted') and decrypted_data[field] is True:
+                original_field = field[1:-10]  # Remove "_" prefix and "_encrypted" suffix
+                encrypted_fields.append(original_field)
+                # Remove marker
+                del decrypted_data[field]
+        
+        # Decrypt fields
+        for field in encrypted_fields:
+            if field in decrypted_data and isinstance(decrypted_data[field], str):
+                decrypted_data[field] = self.decrypt_value(decrypted_data[field])
+        
+        return decrypted_data
+    
+    def encrypt_json(self, json_str: str, sensitive_fields: List[str]) -> str:
+        """
+        Encrypt sensitive fields in JSON string
+        
+        Args:
+            json_str: JSON string to encrypt
+            sensitive_fields: List of field names to encrypt
+            
+        Returns:
+            JSON string with encrypted fields
+        """
+        try:
+            data = json.loads(json_str)
+            encrypted_data = self.encrypt_dict(data, sensitive_fields)
+            return json.dumps(encrypted_data)
+        except Exception as e:
+            self.logger.error(f"JSON encryption error: {e}")
+            # Return original if encryption fails
+            return json_str
+            
+class EncryptedDatabaseWrapper:
+    """Wrapper around PesoDatabase with encryption capabilities"""
+    
+    def __init__(self, db_instance, encryption_module: DatabaseEncryption,
+                sensitive_fields: List[str] = None):
+        """
+        Initialize encrypted database wrapper
+        
+        Args:
+            db_instance: PesoDatabase instance to wrap
+            encryption_module: DatabaseEncryption instance
+            sensitive_fields: List of field names to encrypt (default fields used if None)
+        """
+        self.db = db_instance
+        self.encryption = encryption_module
+        self.logger = logging.getLogger(__name__)
+        
+        # Default sensitive fields to encrypt
+        self.sensitive_fields = sensitive_fields or [
+            'email', 'phone', 'address', 'credit_card',
+            'ssn', 'password', 'api_key', 'access_token'
+        ]
+    
+    def add_dataset(self, name: str, data_type: str, source: str = None, 
+                   metadata: Dict[str, Any] = None) -> int:
+        """
+        Add a new dataset with encryption for sensitive fields
+        
+        Args:
+            name: Name of the dataset
+            data_type: Type of dataset
+            source: Source of the dataset
+            metadata: Additional metadata
+            
+        Returns:
+            Dataset ID
+        """
+        # Encrypt metadata if present
+        if metadata:
+            metadata = self.encryption.encrypt_dict(metadata, self.sensitive_fields)
+        
+        # Call original method
+        return self.db.add_dataset(name, data_type, source, metadata)
+    
+    def add_dataset_version(self, dataset_id: int, data: List[Dict[str, Any]]) -> int:
+        """
+        Add a new dataset version with encrypted sensitive fields
+        
+        Args:
+            dataset_id: ID of the dataset
+            data: List of data entries
+            
+        Returns:
+            Version number
+        """
+        # Encrypt sensitive fields in each record
+        encrypted_data = []
+        for record in data:
+            encrypted_record = self.encryption.encrypt_dict(record, self.sensitive_fields)
+            encrypted_data.append(encrypted_record)
+        
+        # Call original method
+        return self.db.add_dataset_version(dataset_id, encrypted_data)
+    
+    def get_dataset(self, dataset_id: int, version: int = None) -> Dict[str, Any]:
+        """
+        Get a dataset with decrypted fields
+        
+        Args:
+            dataset_id: ID of the dataset
+            version: Specific version to retrieve
+            
+        Returns:
+            Decrypted dataset
+        """
+        # Get encrypted dataset from original method
+        dataset = self.db.get_dataset(dataset_id, version)
+        
+        if not dataset:
+            return None
+        
+        # Decrypt metadata
+        if dataset.get('metadata') and isinstance(dataset['metadata'], dict):
+            dataset['metadata'] = self.encryption.decrypt_dict(dataset['metadata'])
+        
+        # Decrypt data records
+        if dataset.get('data') and isinstance(dataset['data'], list):
+            decrypted_data = []
+            for record in dataset['data']:
+                decrypted_record = self.encryption.decrypt_dict(record)
+                decrypted_data.append(decrypted_record)
+            dataset['data'] = decrypted_data
+        
+        return dataset
+    
+    def __getattr__(self, name):
+        """
+        Pass through any other methods to the original database instance
+        
+        Args:
+            name: Method name
+            
+        Returns:
+            Method from original database instance
+        """
+        return getattr(self.db, name)
+
+# Example usage
+if __name__ == "__main__":
+    from peso_database_module import PesoDatabase
+    
+    # Initialize database
+    db = PesoDatabase()
+    
+    # Initialize encryption
+    encryption = DatabaseEncryption(config={
+        'security': {
+            'encryption_key_file': 'encryption.key'
+        }
+    })
+    
+    # Create encrypted wrapper
+    encrypted_db = EncryptedDatabaseWrapper(db, encryption)
+    
+    # Sample data with sensitive information
+    sample_data = [
+        {
+            'name': 'John Doe',
+            'email': 'john@example.com',
+            'country': 'USA'
+        },
+        {
+            'name': 'Jane Smith',
+            'email': 'jane@example.com',
+            'phone': '555-123-4567',
+            'country': 'UK'
+        }
+    ]
+    
+    # Add encrypted dataset
+    dataset_id = encrypted_db.add_dataset(
+        name="Encrypted Test Dataset",
+        data_type="test",
+        metadata={'description': 'Contains encrypted fields'}
+    )
+    
+    # Add encrypted version
+    encrypted_db.add_dataset_version(dataset_id, sample_data)
+    
+    # Retrieve and decrypt
+    decrypted_dataset = encrypted_db.get_dataset(dataset_id)
+    
+    print("Decrypted dataset:")
+    print(json.dumps(decrypted_dataset, indent=2))
+    
+    def decrypt_json(self, json_str: str) -> str:
+        """
+        Decrypt all encrypted fields in JSON string
+        
+        Args:
+            json_str: JSON string with encrypted fields
+            
+        Returns:
+            JSON string with decrypted fields
+        """
+        try:
+            data = json.loads(json_str)
+            decrypted_data = self.decrypt_dict(data)
+            return json.dumps(decrypted_data)
+        except Exception as e:
+            self.logger.error(f"JSON decryption error: {e}")
+            # Return original if decryption fails
+            return json_str

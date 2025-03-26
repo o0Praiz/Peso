@@ -1,0 +1,1437 @@
+}
+```
+
+3. **Docker Deployment (Optional)**:
+```Dockerfile
+# Frontend Dockerfile
+FROM node:16 as build
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=build /app/build /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+```bash
+# Build and run
+docker build -t peso-dashboard .
+docker run -p 80:80 peso-dashboard
+```
+
+### CI/CD Pipeline (GitHub Actions)
+
+```yaml
+name: Peso CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+    - name: Test with pytest
+      run: |
+        pytest --cov=./ --cov-report=xml
+    
+  build-and-deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Build and deploy
+      run: |
+        # Add deployment steps here
+        echo "Deploying application..."
+```
+
+## Security Best Practices
+
+1. **API Security**:
+   - Use strong JWT secrets and short expiration times
+   - Implement proper CORS settings
+   - Use HTTPS in production
+   - Validate all inputs with Pydantic models
+   - Apply rate limiting to prevent abuse
+   - Implement proper error handling without exposing sensitive details
+
+2. **Database Security**:
+   - Use field-level encryption for sensitive data
+   - Implement key rotation policies
+   - Use prepared statements to prevent SQL injection
+   - Back up database regularly
+   - Implement database access controls
+   - Add audit logging for sensitive operations
+
+3. **Authentication Best Practices**:
+   - Store hashed passwords only (never plain text)
+   - Implement multi-factor authentication for admin accounts
+   - Use proper password complexity requirements
+   - Add login attempt rate limiting
+   - Implement proper session management
+   - Require re-authentication for sensitive operations
+
+4. **Frontend Security**:
+   - Sanitize all user inputs
+   - Use Content Security Policy (CSP)
+   - Implement proper error handling
+   - Don't store sensitive data in localStorage (use httpOnly cookies instead)
+   - Use proper CSRF protection
+   - Keep dependencies updated
+
+## Performance Optimization
+
+1. **API Optimization**:
+   - Implement database query optimization
+   - Add caching for frequent requests
+   - Use pagination for large datasets
+   - Optimize background tasks
+   - Consider database indexing for common queries
+   - Use compression for responses
+
+2. **Frontend Optimization**:
+   - Implement code splitting
+   - Use lazy loading for components
+   - Optimize images and assets
+   - Implement virtualization for large lists
+   - Add proper caching strategies
+   - Use memoization for expensive computations
+
+## Testing Strategy
+
+1. **API Testing**:
+   - Unit tests for individual functions
+   - Integration tests for API endpoints
+   - Performance tests
+   - Security tests
+   - End-to-end tests
+
+2. **Frontend Testing**:
+   - Component tests
+   - Integration tests
+   - End-to-end tests
+   - Visual regression tests
+   - Accessibility tests
+
+## Maintenance and Monitoring
+
+1. **Logging**:
+   - Implement structured logging
+   - Add request/response logging
+   - Log errors and exceptions
+   - Monitor performance metrics
+   - Track user activity for security purposes
+
+2. **Monitoring**:
+   - Set up health check endpoints
+   - Implement performance monitoring
+   - Add error tracking
+   - Set up alerts for critical issues
+   - Monitor API usage patterns
+
+3. **Maintenance**:
+   - Keep dependencies updated
+   - Implement automated security scanning
+   - Regular database maintenance
+   - Review and optimize queries
+   - Document all changes and features                <Typography component="h1" variant="h5" align="center">
+                    Peso Dashboard Login
+                </Typography>
+                
+                {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+                
+                <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
+                    <TextField
+                        variant="outlined"
+                        margin="normal"
+                        required
+                        fullWidth
+                        id="username"
+                        label="Username"
+                        name="username"
+                        autoComplete="username"
+                        autoFocus
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                    />
+                    <TextField
+                        variant="outlined"
+                        margin="normal"
+                        required
+                        fullWidth
+                        name="password"
+                        label="Password"
+                        type="password"
+                        id="password"
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <Button
+                        type="submit"
+                        fullWidth
+                        variant="contained"
+                        color="primary"
+                        sx={{ mt: 3, mb: 2 }}
+                    >
+                        Sign In
+                    </Button>
+                </Box>
+            </Paper>
+        </Container>
+    );
+};
+
+export default Login;
+```
+
+```jsx
+// src/services/authService.js
+import axios from 'axios';
+import jwtDecode from 'jwt-decode';
+
+const API_URL = 'http://localhost:8000';
+
+export const login = async (username, password) => {
+    const formData = new FormData();
+    formData.append('username', username);
+    formData.append('password', password);
+    
+    const response = await axios.post(`${API_URL}/token`, formData);
+    return response.data;
+};
+
+export const isAuthenticated = () => {
+    const token = localStorage.getItem('token');
+    if (!token) return false;
+    
+    try {
+        const decoded = jwtDecode(token);
+        // Check if token is expired
+        if (decoded.exp < Date.now() / 1000) {
+            localStorage.removeItem('token');
+            return false;
+        }
+        return true;
+    } catch (error) {
+        localStorage.removeItem('token');
+        return false;
+    }
+};
+
+export const logout = () => {
+    localStorage.removeItem('token');
+};
+```
+
+## Step 3: Create Dashboard Layout
+
+```jsx
+// src/components/layout/DashboardLayout.js
+import React from 'react';
+import { 
+    AppBar, Box, CssBaseline, Drawer, IconButton, List, ListItem, 
+    ListItemIcon, ListItemText, Toolbar, Typography, Divider 
+} from '@mui/material';
+import {
+    Menu as MenuIcon, Dashboard as DashboardIcon, Storage as StorageIcon,
+    ShowChart as ChartIcon, Settings as SettingsIcon, Logout as LogoutIcon
+} from '@mui/icons-material';
+import { Outlet, useNavigate } from 'react-router-dom';
+import { logout } from '../../services/authService';
+
+const drawerWidth = 240;
+
+const DashboardLayout = ({ setAuthenticated }) => {
+    const [mobileOpen, setMobileOpen] = React.useState(false);
+    const navigate = useNavigate();
+    
+    const handleDrawerToggle = () => {
+        setMobileOpen(!mobileOpen);
+    };
+    
+    const handleLogout = () => {
+        logout();
+        setAuthenticated(false);
+        navigate('/login');
+    };
+    
+    const menuItems = [
+        { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+        { text: 'Datasets', icon: <StorageIcon />, path: '/datasets' },
+        { text: 'Visualizations', icon: <ChartIcon />, path: '/visualizations' },
+        { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
+    ];
+    
+    const drawer = (
+        <div>
+            <Toolbar sx={{ justifyContent: 'center' }}>
+                <Typography variant="h6" noWrap component="div">
+                    Peso Dashboard
+                </Typography>
+            </Toolbar>
+            <Divider />
+            <List>
+                {menuItems.map((item) => (
+                    <ListItem 
+                        button 
+                        key={item.text} 
+                        onClick={() => navigate(item.path)}
+                    >
+                        <ListItemIcon>{item.icon}</ListItemIcon>
+                        <ListItemText primary={item.text} />
+                    </ListItem>
+                ))}
+            </List>
+            <Divider />
+            <List>
+                <ListItem button onClick={handleLogout}>
+                    <ListItemIcon><LogoutIcon /></ListItemIcon>
+                    <ListItemText primary="Logout" />
+                </ListItem>
+            </List>
+        </div>
+    );
+    
+    return (
+        <Box sx={{ display: 'flex' }}>
+            <CssBaseline />
+            <AppBar
+                position="fixed"
+                sx={{
+                    width: { sm: `calc(100% - ${drawerWidth}px)` },
+                    ml: { sm: `${drawerWidth}px` },
+                }}
+            >
+                <Toolbar>
+                    <IconButton
+                        color="inherit"
+                        aria-label="open drawer"
+                        edge="start"
+                        onClick={handleDrawerToggle}
+                        sx={{ mr: 2, display: { sm: 'none' } }}
+                    >
+                        <MenuIcon />
+                    </IconButton>
+                    <Typography variant="h6" noWrap component="div">
+                        Peso Marketing Data Warehouse
+                    </Typography>
+                </Toolbar>
+            </AppBar>
+            <Box
+                component="nav"
+                sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+            >
+                <Drawer
+                    variant="temporary"
+                    open={mobileOpen}
+                    onClose={handleDrawerToggle}
+                    ModalProps={{ keepMounted: true }}
+                    sx={{
+                        display: { xs: 'block', sm: 'none' },
+                        '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+                    }}
+                >
+                    {drawer}
+                </Drawer>
+                <Drawer
+                    variant="permanent"
+                    sx={{
+                        display: { xs: 'none', sm: 'block' },
+                        '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+                    }}
+                    open
+                >
+                    {drawer}
+                </Drawer>
+            </Box>
+            <Box
+                component="main"
+                sx={{ 
+                    flexGrow: 1, 
+                    p: 3, 
+                    width: { sm: `calc(100% - ${drawerWidth}px)` },
+                    mt: '64px'
+                }}
+            >
+                <Outlet />
+            </Box>
+        </Box>
+    );
+};
+
+export default DashboardLayout;
+```
+
+## Step 4: Create Dataset Components
+
+```jsx
+// src/components/datasets/DatasetList.js
+import React, { useState, useEffect } from 'react';
+import { 
+    Paper, Typography, Table, TableBody, TableCell, TableContainer, 
+    TableHead, TableRow, Button, Box, CircularProgress
+} from '@mui/material';
+import { Add as AddIcon } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
+import { getDatasets } from '../../services/datasetService';
+
+const DatasetList = () => {
+    const [datasets, setDatasets] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const navigate = useNavigate();
+    
+    useEffect(() => {
+        const fetchDatasets = async () => {
+            try {
+                const data = await getDatasets();
+                setDatasets(data.datasets);
+                setLoading(false);
+            } catch (err) {
+                setError('Failed to load datasets');
+                setLoading(false);
+            }
+        };
+        
+        fetchDatasets();
+    }, []);
+    
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
+    
+    if (error) {
+        return (
+            <Typography color="error" sx={{ mt: 2 }}>{error}</Typography>
+        );
+    }
+    
+    return (
+        <div>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+                <Typography variant="h4" component="h1">
+                    Datasets
+                </Typography>
+                <Button 
+                    variant="contained" 
+                    color="primary" 
+                    startIcon={<AddIcon />}
+                    onClick={() => navigate('/datasets/create')}
+                >
+                    Create Dataset
+                </Button>
+            </Box>
+            
+            <TableContainer component={Paper}>
+                <Table>
+                    <TableHead>
+                        <TableRow>
+                            <TableCell>ID</TableCell>
+                            <TableCell>Name</TableCell>
+                            <TableCell>Type</TableCell>
+                            <TableCell>Records</TableCell>
+                            <TableCell>Created</TableCell>
+                            <TableCell>Actions</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {datasets.map((dataset) => (
+                            <TableRow key={dataset.id}>
+                                <TableCell>{dataset.id}</TableCell>
+                                <TableCell>{dataset.name}</TableCell>
+                                <TableCell>{dataset.type}</TableCell>
+                                <TableCell>{dataset.record_count}</TableCell>
+                                <TableCell>{new Date(dataset.created_at).toLocaleDateString()}</TableCell>
+                                <TableCell>
+                                    <Button 
+                                        variant="outlined" 
+                                        size="small"
+                                        onClick={() => navigate(`/datasets/${dataset.id}`)}
+                                    >
+                                        View
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </div>
+    );
+};
+
+export default DatasetList;
+```
+
+```jsx
+// src/services/datasetService.js
+import axios from 'axios';
+
+const API_URL = 'http://localhost:8000';
+
+// Configure axios with auth header
+const authAxios = axios.create({
+    baseURL: API_URL
+});
+
+authAxios.interceptors.request.use(
+    config => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            config.headers['Authorization'] = `Bearer ${token}`;
+        }
+        return config;
+    },
+    error => Promise.reject(error)
+);
+
+export const getDatasets = async () => {
+    const response = await authAxios.get('/datasets');
+    return response.data;
+};
+
+export const getDataset = async (id) => {
+    const response = await authAxios.get(`/datasets/${id}`);
+    return response.data;
+};
+
+export const createDataset = async (datasetData) => {
+    const response = await authAxios.post('/datasets', datasetData);
+    return response.data;
+};
+```
+
+## Step 5: Create Visualization Components
+
+```jsx
+// src/components/visualizations/VisualizationList.js
+import React, { useState, useEffect } from 'react';
+import { 
+    Grid, Card, CardContent, CardMedia, Typography, 
+    Button, Box, CircularProgress
+} from '@mui/material';
+import { Add as AddIcon } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
+import { getVisualizations } from '../../services/visualizationService';
+
+const VisualizationList = () => {
+    const [visualizations, setVisualizations] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const navigate = useNavigate();
+    
+    useEffect(() => {
+        const fetchVisualizations = async () => {
+            try {
+                const data = await getVisualizations();
+                setVisualizations(data.visualizations);
+                setLoading(false);
+            } catch (err) {
+                setError('Failed to load visualizations');
+                setLoading(false);
+            }
+        };
+        
+        fetchVisualizations();
+    }, []);
+    
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
+    
+    if (error) {
+        return (
+            <Typography color="error" sx={{ mt: 2 }}>{error}</Typography>
+        );
+    }
+    
+    return (
+        <div>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+                <Typography variant="h4" component="h1">
+                    Visualizations
+                </Typography>
+                <Button 
+                    variant="contained" 
+                    color="primary" 
+                    startIcon={<AddIcon />}
+                    onClick={() => navigate('/visualizations/create')}
+                >
+                    Create Visualization
+                </Button>
+            </Box>
+            
+            <Grid container spacing={3}>
+                {visualizations.map((viz) => (
+                    <Grid item xs={12} sm={6} md={4} key={viz.id}>
+                        <Card>
+                            <CardMedia
+                                component="img"
+                                height="200"
+                                image={viz.url}
+                                alt={viz.title}
+                            />
+                            <CardContent>
+                                <Typography gutterBottom variant="h6" component="div">
+                                    {viz.title}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    {viz.description}
+                                </Typography>
+                                <Box sx={{ mt: 2 }}>
+                                    <Button 
+                                        variant="outlined" 
+                                        size="small"
+                                        onClick={() => navigate(`/visualizations/${viz.id}`)}
+                                    >
+                                        View
+                                    </Button>
+                                </Box>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                ))}
+            </Grid>
+        </div>
+    );
+};
+
+export default VisualizationList;
+```
+
+```jsx
+// src/services/visualizationService.js
+import axios from 'axios';
+
+const API_URL = 'http://localhost:8000';
+
+// Configure axios with auth header (same as in datasetService.js)
+const authAxios = axios.create({
+    baseURL: API_URL
+});
+
+authAxios.interceptors.request.use(
+    config => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            config.headers['Authorization'] = `Bearer ${token}`;
+        }
+        return config;
+    },
+    error => Promise.reject(error)
+);
+
+export const getVisualizations = async () => {
+    // In a real app, this would call the API
+    // Mock data for now
+    return {
+        visualizations: [
+            {
+                id: 1,
+                title: 'Industry Distribution',
+                description: 'Distribution of records by industry',
+                url: 'https://via.placeholder.com/300',
+                chart_type: 'bar_chart',
+                dataset_id: 1
+            },
+            {
+                id: 2,
+                title: 'Revenue Trend',
+                description: 'Monthly revenue trend analysis',
+                url: 'https://via.placeholder.com/300',
+                chart_type: 'line_chart',
+                dataset_id: 1
+            },
+            {
+                id: 3,
+                title: 'Customer Distribution',
+                description: 'Geographic distribution of customers',
+                url: 'https://via.placeholder.com/300',
+                chart_type: 'map',
+                dataset_id: 2
+            }
+        ]
+    };
+};
+
+export const getVisualization = async (id) => {
+    // Mock data
+    return {
+        id,
+        title: 'Industry Distribution',
+        description: 'Distribution of records by industry',
+        url: 'https://via.placeholder.com/600x400',
+        chart_type: 'bar_chart',
+        dataset_id: 1,
+        created_at: '2025-03-26T12:00:00',
+        data: {
+            // Chart data would go here
+        }
+    };
+};
+
+export const createVisualization = async (vizData) => {
+    const response = await authAxios.post('/visualizations', vizData);
+    return response.data;
+};
+```
+
+## Step A: Create Dashboard Homepage
+
+```jsx
+// src/components/dashboard/DashboardHome.js
+import React, { useState, useEffect } from 'react';
+import { 
+    Grid, Paper, Typography, Box, Card, CardContent,
+    CardHeader, CircularProgress
+} from '@mui/material';
+import { 
+    PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, 
+    CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+} from 'recharts';
+import { getDashboardStats } from '../../services/dashboardService';
+
+const DashboardHome = () => {
+    const [stats, setStats] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    
+    const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+    
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const data = await getDashboardStats();
+                setStats(data);
+                setLoading(false);
+            } catch (err) {
+                setError('Failed to load dashboard stats');
+                setLoading(false);
+            }
+        };
+        
+        fetchStats();
+    }, []);
+    
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
+    
+    if (error) {
+        return (
+            <Typography color="error" sx={{ mt: 2 }}>{error}</Typography>
+        );
+    }
+    
+    // Mock data for demo purposes
+    const stats = {
+        datasetCount: 5,
+        recordCount: 12500,
+        visualizationCount: 12,
+        recentActivity: [
+            { timestamp: '2025-03-26T10:30:00', action: 'Dataset created', user: 'admin' },
+            { timestamp: '2025-03-26T11:15:00', action: 'Visualization created', user: 'admin' },
+            { timestamp: '2025-03-26T12:45:00', action: 'Dataset enriched', user: 'admin' }
+        ],
+        dataTypeDistribution: [
+            { name: 'Human', value: 3 },
+            { name: 'Non-Human', value: 2 }
+        ],
+        monthlyGrowth: [
+            { month: 'Jan', records: 1500 },
+            { month: 'Feb', records: 2300 },
+            { month: 'Mar', records: 3100 },
+            { month: 'Apr', records: 5600 }
+        ]
+    };
+    
+    return (
+        <div>
+            <Typography variant="h4" component="h1" gutterBottom>
+                Dashboard
+            </Typography>
+            
+            <Grid container spacing={3}>
+                {/* Stats Summary */}
+                <Grid item xs={12} md={4}>
+                    <Paper sx={{ p: 2 }}>
+                        <Typography variant="h6" gutterBottom>
+                            Datasets
+                        </Typography>
+                        <Typography variant="h3">
+                            {stats.datasetCount}
+                        </Typography>
+                    </Paper>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                    <Paper sx={{ p: 2 }}>
+                        <Typography variant="h6" gutterBottom>
+                            Total Records
+                        </Typography>
+                        <Typography variant="h3">
+                            {stats.recordCount.toLocaleString()}
+                        </Typography>
+                    </Paper>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                    <Paper sx={{ p: 2 }}>
+                        <Typography variant="h6" gutterBottom>
+                            Visualizations
+                        </Typography>
+                        <Typography variant="h3">
+                            {stats.visualizationCount}
+                        </Typography>
+                    </Paper>
+                </Grid>
+                
+                {/* Data Type Distribution */}
+                <Grid item xs={12} md={6}>
+                    <Card>
+                        <CardHeader title="Dataset Type Distribution" />
+                        <CardContent>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <PieChart>
+                                    <Pie
+                                        data={stats.dataTypeDistribution}
+                                        cx="50%"
+                                        cy="50%"
+                                        labelLine={false}
+                                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                                        outerRadius={80}
+                                        fill="#8884d8"
+                                        dataKey="value"
+                                    >
+                                        {stats.dataTypeDistribution.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                
+                {/* Monthly Growth */}
+                <Grid item xs={12} md={6}>
+                    <Card>
+                        <CardHeader title="Monthly Record Growth" />
+                        <CardContent>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <LineChart
+                                    data={stats.monthlyGrowth}
+                                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="month" />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Line 
+                                        type="monotone" 
+                                        dataKey="records" 
+                                        stroke="#8884d8" 
+                                        activeDot={{ r: 8 }} 
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                
+                {/* Recent Activity */}
+                <Grid item xs={12}>
+                    <Card>
+                        <CardHeader title="Recent Activity" />
+                        <CardContent>
+                            <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+                                {stats.recentActivity.map((activity, index) => (
+                                    <Box key={index} sx={{ 
+                                        display: 'flex', 
+                                        justifyContent: 'space-between',
+                                        p: 1,
+                                        borderBottom: '1px solid #eee'
+                                    }}>
+                                        <Typography variant="body1">
+                                            {activity.action} by {activity.user}
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            {new Date(activity.timestamp).toLocaleString()}
+                                        </Typography>
+                                    </Box>
+                                ))}
+                            </Box>
+                        </CardContent>
+                    </Card>
+                </Grid>
+            </Grid>
+        </div>
+    );
+};
+
+export default DashboardHome;
+```
+
+## Step B: Configure Routing and App Setup
+
+```jsx
+// src/App.js
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import { isAuthenticated } from './services/authService';
+
+// Import components
+import Login from './components/auth/Login';
+import DashboardLayout from './components/layout/DashboardLayout';
+import DashboardHome from './components/dashboard/DashboardHome';
+import DatasetList from './components/datasets/DatasetList';
+import DatasetDetail from './components/datasets/DatasetDetail';
+import DatasetCreate from './components/datasets/DatasetCreate';
+import VisualizationList from './components/visualizations/VisualizationList';
+import VisualizationDetail from './components/visualizations/VisualizationDetail';
+import VisualizationCreate from './components/visualizations/VisualizationCreate';
+import Settings from './components/settings/Settings';
+
+// Create theme
+const theme = createTheme({
+    palette: {
+        primary: {
+            main: '#2196f3',
+        },
+        secondary: {
+            main: '#f50057',
+        },
+    },
+});
+
+// Protected route component
+const ProtectedRoute = ({ children }) => {
+    const [authenticated, setAuthenticated] = useState(isAuthenticated());
+    
+    if (!authenticated) {
+        return <Navigate to="/login" />;
+    }
+    
+    return children;
+};
+
+const App = () => {
+    const [authenticated, setAuthenticated] = useState(isAuthenticated());
+    
+    return (
+        <ThemeProvider theme={theme}>
+            <CssBaseline />
+            <BrowserRouter>
+                <Routes>
+                    <Route 
+                        path="/login" 
+                        element={<Login setAuthenticated={setAuthenticated} />} 
+                    />
+                    <Route 
+                        path="/" 
+                        element={
+                            <ProtectedRoute>
+                                <DashboardLayout setAuthenticated={setAuthenticated} />
+                            </ProtectedRoute>
+                        }
+                    >
+                        <Route index element={<Navigate to="/dashboard" replace />} />
+                        <Route path="dashboard" element={<DashboardHome />} />
+                        <Route path="datasets" element={<DatasetList />} />
+                        <Route path="datasets/:id" element={<DatasetDetail />} />
+                        <Route path="datasets/create" element={<DatasetCreate />} />
+                        <Route path="visualizations" element={<VisualizationList />} />
+                        <Route path="visualizations/:id" element={<VisualizationDetail />} />
+                        <Route path="visualizations/create" element={<VisualizationCreate />} />
+                        <Route path="settings" element={<Settings />} />
+                    </Route>
+                </Routes>
+            </BrowserRouter>
+        </ThemeProvider>
+    );
+};
+
+export default App;
+```
+
+## Deployment Instructions
+
+### API Deployment
+
+1. **Set up environment**:
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate  # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+2. **Configure the API**:
+```bash
+# Create .env file
+echo "SECRET_KEY=your_secure_secret_key_here" > .env
+echo "DATABASE_URL=sqlite:///peso.db" >> .env
+echo "ALLOW_ORIGINS=http://localhost:3000" >> .env
+```
+
+3. **Run the API server**:
+```bash
+# Development
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# Production with Gunicorn
+gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app
+```
+
+### Dashboard Deployment
+
+1. **Build the React application**:
+```bash
+# Install dependencies
+npm install
+
+# Create production build
+npm run build
+```
+
+2. **Deploy with Nginx**:
+```nginx
+server {
+    listen 80;
+    server_name dashboard.example.com;
+
+    root /path/to/build;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}"""
+Peso Implementation Guide for API and Dashboard
+Step-by-step instructions for implementing the API and dashboard components
+"""
+
+# API LAYER IMPLEMENTATION
+
+## Step 1: Set up FastAPI with Authentication
+
+```python
+# Install required packages
+# pip install fastapi uvicorn python-jose[cryptography] passlib[bcrypt] python-multipart
+
+# Create the main API file (api.py)
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from pydantic import BaseModel
+from datetime import datetime, timedelta
+from typing import Optional, List, Dict, Any
+
+# Security settings
+SECRET_KEY = "your-secret-key-here"  # In production, use a proper secret key
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Token URL
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# Create the FastAPI app
+app = FastAPI(
+    title="Peso API",
+    description="API for the Peso Marketing Data Warehouse",
+    version="0.6.0",
+)
+
+# Token model
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+# Token data model
+class TokenData(BaseModel):
+    username: Optional[str] = None
+
+# User model
+class User(BaseModel):
+    username: str
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+    disabled: Optional[bool] = None
+
+# User in database model
+class UserInDB(User):
+    hashed_password: str
+
+# Function to verify password
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+# Function to hash password
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+# Function to get user from database
+def get_user(db, username: str):
+    # This would be a database lookup in a real application
+    # For now, we'll use a hard-coded dictionary
+    users_db = {
+        "admin": {
+            "username": "admin",
+            "full_name": "Admin User",
+            "email": "admin@example.com",
+            "hashed_password": get_password_hash("admin"),
+            "disabled": False,
+        }
+    }
+    if username in users_db:
+        user_dict = users_db[username]
+        return UserInDB(**user_dict)
+
+# Function to authenticate user
+def authenticate_user(username: str, password: str):
+    user = get_user(None, username)
+    if not user:
+        return False
+    if not verify_password(password, user.hashed_password):
+        return False
+    return user
+
+# Function to create access token
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+# Function to get current user
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except JWTError:
+        raise credentials_exception
+    user = get_user(None, username=token_data.username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+# Function to get current active user
+async def get_current_active_user(current_user: User = Depends(get_current_user)):
+    if current_user.disabled:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+# Login endpoint
+@app.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+# Protected route example
+@app.get("/users/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    return current_user
+```
+
+## Step 2: Implement Dataset Endpoints
+
+```python
+# Dataset models
+class DatasetCreate(BaseModel):
+    name: str
+    data_type: str
+    synthetic_count: int = 100
+
+class DatasetResponse(BaseModel):
+    id: int
+    name: str
+    type: str
+    created_at: str
+    last_updated: str
+    version: int
+    record_count: int
+
+# Dataset endpoints
+@app.get("/datasets", response_model=List[DatasetResponse])
+async def list_datasets(current_user: User = Depends(get_current_active_user)):
+    # Replace with actual database query
+    return [
+        {
+            "id": 1,
+            "name": "Test Dataset",
+            "type": "non-human",
+            "created_at": "2025-03-26T12:00:00",
+            "last_updated": "2025-03-26T12:00:00",
+            "version": 1,
+            "record_count": 100
+        }
+    ]
+
+@app.get("/datasets/{dataset_id}", response_model=DatasetResponse)
+async def get_dataset(
+    dataset_id: int, 
+    version: Optional[int] = None,
+    current_user: User = Depends(get_current_active_user)
+):
+    # Replace with actual database query
+    return {
+        "id": dataset_id,
+        "name": "Test Dataset",
+        "type": "non-human",
+        "created_at": "2025-03-26T12:00:00",
+        "last_updated": "2025-03-26T12:00:00",
+        "version": version or 1,
+        "record_count": 100
+    }
+
+@app.post("/datasets", response_model=Dict[str, Any])
+async def create_dataset(
+    dataset: DatasetCreate,
+    current_user: User = Depends(get_current_active_user)
+):
+    # Replace with actual database creation
+    return {
+        "dataset_id": 1,
+        "message": f"Created dataset {dataset.name} with {dataset.synthetic_count} records"
+    }
+```
+
+## Step 3: Implement Visualization Endpoints
+
+```python
+# Visualization models
+class VisualizationRequest(BaseModel):
+    dataset_id: int
+    chart_type: str
+    columns: List[str]
+    parameters: Dict[str, Any] = {}
+    version: Optional[int] = None
+
+class VisualizationResponse(BaseModel):
+    chart_id: str
+    dataset_id: int
+    chart_type: str
+    url: str
+
+# Visualization endpoints
+@app.post("/visualizations", response_model=VisualizationResponse)
+async def create_visualization(
+    request: VisualizationRequest,
+    current_user: User = Depends(get_current_active_user)
+):
+    # Replace with actual visualization generation
+    chart_id = f"chart_{request.dataset_id}_{request.chart_type}"
+    return {
+        "chart_id": chart_id,
+        "dataset_id": request.dataset_id,
+        "chart_type": request.chart_type,
+        "url": f"/api/visualizations/{chart_id}"
+    }
+
+@app.get("/visualizations/{chart_id}")
+async def get_visualization(chart_id: str):
+    # In a real implementation, this would return the actual chart image
+    return {"message": f"Chart {chart_id} would be returned here"}
+```
+
+## Step 4: Implement Background Tasks
+
+```python
+from fastapi import BackgroundTasks
+
+# Task model
+class TaskResponse(BaseModel):
+    task_id: str
+    message: str
+    status: str
+
+# Background task storage (would use a database in production)
+task_store = {}
+
+# Background task function example
+def process_dataset_task(dataset_id: int, task_id: str):
+    # Simulate processing
+    import time
+    time.sleep(5)
+    # Update task status
+    task_store[task_id] = {
+        "task_id": task_id,
+        "dataset_id": dataset_id,
+        "status": "completed",
+        "completed_at": datetime.utcnow().isoformat()
+    }
+
+@app.post("/datasets/{dataset_id}/process", response_model=TaskResponse)
+async def process_dataset(
+    dataset_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_active_user)
+):
+    task_id = f"task_{datetime.utcnow().timestamp()}"
+    
+    # Store initial task status
+    task_store[task_id] = {
+        "task_id": task_id,
+        "dataset_id": dataset_id,
+        "status": "processing",
+        "started_at": datetime.utcnow().isoformat()
+    }
+    
+    # Add task to background tasks
+    background_tasks.add_task(process_dataset_task, dataset_id, task_id)
+    
+    return {
+        "task_id": task_id,
+        "message": f"Processing dataset {dataset_id}",
+        "status": "processing"
+    }
+
+@app.get("/tasks/{task_id}", response_model=Dict[str, Any])
+async def get_task_status(
+    task_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    if task_id not in task_store:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task {task_id} not found"
+        )
+    return task_store[task_id]
+```
+
+# DASHBOARD IMPLEMENTATION
+
+## Step 1: Set up React Project
+
+```bash
+# Create React app
+npx create-react-app peso-dashboard
+cd peso-dashboard
+
+# Install dependencies
+npm install @mui/material @emotion/react @emotion/styled
+npm install @mui/icons-material
+npm install react-router-dom
+npm install recharts
+npm install axios
+npm install jwt-decode
+```
+
+## Step 2: Create Authentication Components
+
+```jsx
+// src/components/auth/Login.js
+import React, { useState } from 'react';
+import { 
+    Button, TextField, Paper, Typography, 
+    Container, Box, Alert 
+} from '@mui/material';
+import { useNavigate } from 'react-router-dom';
+import { login } from '../../services/authService';
+
+const Login = ({ setAuthenticated }) => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const navigate = useNavigate();
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        
+        try {
+            const result = await login(username, password);
+            localStorage.setItem('token', result.access_token);
+            setAuthenticated(true);
+            navigate('/dashboard');
+        } catch (err) {
+            setError('Invalid username or password');
+        }
+    };
+
+    return (
+        <Container component="main" maxWidth="xs">
+            <Paper elevation={3} sx={{ p: 4, mt: 8 }}>
+                <Typography component="h1" variant="h5" align="center">
+                    Peso Dashboard Login
+                </Typography>
+                
+                {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
