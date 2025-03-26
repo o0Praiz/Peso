@@ -17,6 +17,7 @@ The system is built with a modular architecture that enables continuous evolutio
 - **Insights Generation**: Automated statistical analysis and marketing-specific insights
 - **Machine Learning**: Built-in ML prediction capabilities for classification and regression tasks
 - **Extensible Framework**: Designed for continuous evolution with easy addition of new capabilities
+- **API Layer**: RESTful API for external access to Peso functionality (v0.6 in progress)
 
 ## Project Structure
 
@@ -28,25 +29,26 @@ peso-project/
 ├── main.py                        # Main entry point script
 │
 ├── database/                      # Database module
-│   └── peso_database_module.py    # Core database functionality
+│   └── database_module.py         # Core database functionality
 │
-├── data_collection/               # Data collection module
-│   └── peso_data_collection.py    # Data collection tools
+├── collection/                    # Data collection module
+│   └── data_collection.py         # Data collection tools
 │
-├── ai_integration/                # AI integration module
-│   └── peso_ai_integration.py     # AI tool connectors
+├── integration/                   # AI integration module
+│   └── ai_integration.py          # AI tool connectors
 │
 ├── query/                         # Query module
-│   └── peso_query_module.py       # Advanced query capabilities
+│   └── query_module.py            # Advanced query capabilities
 │
 ├── insights/                      # Insights generation module
-│   └── peso_insights_generation.py # Data analysis and insights
+│   └── insights_module.py         # Data analysis and insights
 │
 ├── ml/                            # Machine learning module
-│   └── peso_ml_prediction.py      # ML model training and prediction
+│   └── ml_prediction.py           # ML model training and prediction
 │
-├── integration/                   # Integration layer
-│   └── peso_integration_module.py # Cross-module orchestration
+├── api/                           # API module (in development)
+│   ├── api_module.py              # RESTful API endpoints 
+│   └── api_server.py              # API server implementation
 │
 └── models/                        # Directory for saved ML models
 ```
@@ -97,6 +99,18 @@ python main.py ml predict --model classifier_1_20250326_120000 --data new_data.j
 python main.py query --dataset 1 --filter filters.json --output results.json
 ```
 
+### API Layer (Beta)
+
+The API layer is currently in development (v0.6) and provides RESTful access to Peso functionality:
+
+```bash
+# Start the API server
+python api/api_server.py --host 127.0.0.1 --port 8000
+
+# Example API request with curl
+curl -X GET http://localhost:8000/datasets -H "X-API-Key: your_api_key"
+```
+
 ### Configuration
 
 The application is configured through the `config.json` file:
@@ -123,13 +137,13 @@ The application is configured through the `config.json` file:
 
 ## Development Roadmap
 
-- **Current Version**: v0.5
+- **Current Version**: v0.5 (Core functionality complete)
+- **In Development**: v0.6 (API Layer)
 - **Next Milestones**:
-  1. API layer for external access (v0.6)
-  2. Visualization dashboard (v0.7)
-  3. Self-improving capabilities (v0.8)
-  4. Automated data source discovery (v0.9)
-  5. Comprehensive marketing recommendation engine (v1.0)
+  1. **v0.7**: Visualization dashboard with interactive data exploration
+  2. **v0.8**: Self-improving capabilities with automated model retraining
+  3. **v0.9**: Automated data source discovery and schema detection
+  4. **v1.0**: Comprehensive marketing recommendation engine
 
 ## Contributing
 
@@ -141,4 +155,4 @@ This project is proprietary and confidential.
 
 ## Contact
 
-For more information, please contact [project owner].
+For more information, please contact the project owner.
