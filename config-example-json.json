@@ -1,0 +1,46 @@
+{
+  "database": {
+    "path": "peso_marketing.db",
+    "backup_dir": "backups",
+    "max_versions": 10
+  },
+  "ai_tools": {
+    "openai": "YOUR_OPENAI_API_KEY",
+    "anthropic": "YOUR_ANTHROPIC_API_KEY"
+  },
+  "ml": {
+    "models_dir": "models",
+    "default_test_size": 0.2,
+    "default_classifier": "random_forest",
+    "default_regressor": "gradient_boosting"
+  },
+  "data_sources": {
+    "public_apis": [
+      "https://api.example.com/marketing-data",
+      "https://api.publicdata.com/industry-stats"
+    ],
+    "refresh_interval_hours": 24
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/peso.log",
+    "max_size_mb": 10,
+    "backup_count": 5
+  },
+  "insights": {
+    "anomaly_threshold": 3.0,
+    "enable_auto_insights": true,
+    "insights_dir": "insights_reports"
+  },
+  "security": {
+    "enable_data_encryption": false,
+    "encryption_key_file": null
+  },
+  "api": {
+    "enable": false,
+    "host": "127.0.0.1",
+    "port": 8000,
+    "require_auth": true,
+    "api_keys": []
+  }
+}
