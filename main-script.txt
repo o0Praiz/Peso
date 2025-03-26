@@ -1,0 +1,183 @@
+def demo_query_execution():
+    """Demonstrate query execution functionality"""
+    logger.info("Demonstrating query execution...")
+    
+    # Initialize components
+    components = initialize_components()
+    query = components['query']
+    
+    # Query non-human datasets
+    datasets = query.query_datasets({'type': 'non-human'})
+    logger.info(f"Found {len(datasets)} non-human datasets")
+    
+    if datasets:
+        # Advanced query on the first dataset
+        dataset_id = datasets[0]['id']
+        results = query.advanced_query({
+            'dataset_id': dataset_id,
+            'content_search': {'country': 'USA'},
+            'group_by': 'industry'
+        })
+        
+        logger.info(f"Advanced query found {results.get('metrics', {}).get('total_records', 0)} records")
+        return results
+    else:
+        logger.warning("No datasets available for query demonstration")
+        return None
+
+def main():
+    """Main execution function"""
+    logger.info("Starting Peso Project demonstration")
+    
+    try:
+        # Demonstrate data collection
+        dataset_id = demo_data_collection()
+        
+        # Demonstrate insights generation
+        insights_results = demo_insights_generation(dataset_id)
+        
+        # Demonstrate query execution
+        query_results = demo_query_execution()
+        
+        # Demonstrate ML prediction
+        ml_results = demo_ml_prediction(dataset_id)
+        
+        logger.info("Demonstration completed successfully")
+        
+        # Return comprehensive results
+        return {
+            'dataset_id': dataset_id,
+            'insights': insights_results,
+            'query': query_results,
+            'ml_predictions': ml_results
+        }
+        
+    except Exception as e:
+        logger.error(f"Demonstration failed: {str(e)}")
+        return {'error': str(e)}
+
+if __name__ == "__main__":
+    results = main()
+    print(json.dumps(results, indent=2, default=str))def demo_data_collection():
+    """Demonstrate data collection functionality"""
+    logger.info("Demonstrating data collection...")
+    
+    # Initialize components
+    components = initialize_components()
+    db = components['database']
+    collector = components['collector']
+    
+    # Generate synthetic non-human marketing data
+    synthetic_data = collector.generate_synthetic_data('non-human', 50)
+    logger.info(f"Generated {len(synthetic_data)} synthetic non-human marketing records")
+    
+    # Store the dataset
+    dataset_id = collector.process_and_store_data(
+        synthetic_data,
+        "Demo Non-Human Marketing Dataset",
+        "non-human"
+    )
+    
+    logger.info(f"Stored dataset with ID: {dataset_id}")
+    return dataset_id
+
+def demo_insights_generation(dataset_id):
+    """Demonstrate insights generation functionality"""
+    logger.info("Demonstrating insights generation...")
+    
+    # Initialize components
+    components = initialize_components()
+    insights = components['insights']
+    
+    # Generate dataset summary
+    summary = insights.generate_dataset_summary(dataset_id)
+    logger.info("Generated dataset summary")
+    
+    # Generate marketing insights
+    marketing_insights = insights.generate_marketing_insights(dataset_id)
+    logger.info("Generated marketing insights")
+    
+    # Detect anomalies
+    anomalies = insights.detect_anomalies(dataset_id)
+    logger.info("Completed anomaly detection")
+    
+    return {
+        'summary': summary,
+        'marketing_insights': marketing_insights,
+        'anomalies': anomalies
+    }
+
+def demo_ml_prediction(dataset_id):
+    """Demonstrate machine learning prediction functionality"""
+    logger.info("Demonstrating ML prediction...")
+    
+    # Initialize components
+    components = initialize_components()
+    ml = components['ml']
+    
+    # Train a classifier
+    model_info = ml.train_classifier(
+        dataset_id=dataset_id,
+        target_column="industry",
+        features=["country"]
+    )
+    
+    logger.info(f"Trained classifier model: {model_info.get('model_name')}")
+    
+    # Generate test data for prediction
+    test_data = [
+        {"country": "USA"},
+        {"country": "Germany"},
+        {"country": "Japan"}
+    ]
+    
+    # Make predictions
+    if 'error' not in model_info:
+        predictions = ml.predict(model_info['model_name'], test_data)
+        logger.info(f"Generated predictions: {predictions}")
+        return predictions
+    else:
+        logger.error(f"Model training failed: {model_info.get('error')}")
+        return None"""
+Peso Project - Marketing Data Warehouse
+Main module for demonstrating functionality
+"""
+
+import logging
+import json
+from database.database_module import PesoDatabase
+from query.query_module import QueryEngine
+from insights.insights_module import InsightsEngine
+from collection.data_collection import DataCollector
+from integration.ai_integration import AIToolIntegration
+from ml.ml_prediction import MLPredictionEngine
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+def initialize_components():
+    """Initialize all project components"""
+    logger.info("Initializing Peso project components...")
+    
+    # Initialize database
+    db = PesoDatabase()
+    
+    # Initialize other components
+    query_engine = QueryEngine(db)
+    insights_engine = InsightsEngine(db, query_engine)
+    data_collector = DataCollector(db)
+    ai_integration = AIToolIntegration()
+    ml_engine = MLPredictionEngine(db)
+    
+    return {
+        'database': db,
+        'query': query_engine,
+        'insights': insights_engine,
+        'collector': data_collector,
+        'ai': ai_integration,
+        'ml': ml_engine
+    }

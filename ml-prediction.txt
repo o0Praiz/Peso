@@ -1,0 +1,340 @@
+import pandas as pd
+import numpy as np
+import json
+import pickle
+import logging
+from typing import Dict, List, Any, Optional, Tuple
+from datetime import datetime
+import os
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingRegressor
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import accuracy_score, precision_score, recall_score, mean_squared_error, r2_score
+
+class MLPredictionEngine:
+    def __init__(self, db_instance, models_dir: str = "models"):
+        """
+        Initialize ML prediction engine
+        
+        Args:
+            db_instance: PesoDatabase instance
+            models_dir: Directory to store trained models
+        """
+        self.db = db_instance
+        self.models_dir = models_dir
+        self.logger = logging.getLogger(__name__)
+        
+        # Create models directory if it doesn't exist
+        if not os.path.exists(models_dir):
+            os.makedirs(models_dir)
+    
+    def prepare_data(self, dataset_id: int, target_column: str, 
+                    features: List[str] = None, test_size: float = 0.2, 
+                    version: int = None) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+        """
+        Prepare dataset for ML training
+        
+        Args:
+            dataset_id: ID of the dataset to use
+            target_column: Column to predict
+            features: List of feature columns (if None, all except target are used)
+            test_size: Proportion of data to use for testing
+            version: Specific dataset version to use
+            
+        Returns:
+            X_train, X_test, y_train, y_test dataframes/series
+        """
+        try:
+            # Get the dataset
+            dataset = self.db.get_dataset(dataset_id, version)
+            
+            if not dataset or not dataset['data']:
+                raise ValueError(f"Dataset with ID {dataset_id} not found or empty")
+            
+            # Convert to DataFrame
+            df = pd.DataFrame(dataset['data'])
+            
+            # Handle missing values
+            df = df.dropna(subset=[target_column])
+            
+            # Determine features
+            if features is None:
+                features = [col for col in df.columns if col != target_column]
+            
+            # Check if all specified features exist
+            missing_features = [f for f in features if f not in df.columns]
+            if missing_features:
+                raise ValueError(f"Features not found in dataset: {missing_features}")
+            
+            # Split data
+            X = df[features]
+            y = df[target_column]
+            
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=42
+            )
+            
+            return X_train, X_test, y_train, y_test
+        
+        except Exception as e:
+            self.logger.error(f"Data preparation error: {e}")
+            raise
+    
+    def train_classifier(self, dataset_id: int, target_column: str,
+                         features: List[str] = None, model_name: str = None,
+                         version: int = None) -> Dict[str, Any]:
+        """
+        Train a classification model on the dataset
+        
+        Args:
+            dataset_id: ID of the dataset to use
+            target_column: Column to predict
+            features: List of feature columns
+            model_name: Name to save the model (defaults to auto-generated)
+            version: Specific dataset version to use
+            
+        Returns:
+            Dictionary with model info and metrics
+        """
+        try:
+            # Prepare data
+            X_train, X_test, y_train, y_test = self.prepare_data(
+                dataset_id, target_column, features, version=version
+            )
+            
+            # Determine feature types
+            categorical_features = X_train.select_dtypes(include=['object', 'category']).columns.tolist()
+            numeric_features = X_train.select_dtypes(include=['int64', 'float64']).columns.tolist()
+            
+            # Create preprocessing for categorical and numeric features
+            preprocessor = ColumnTransformer(
+                transformers=[
+                    ('num', StandardScaler(), numeric_features),
+                    ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
+                ]
+            )
+            
+            # Create and train the pipeline
+            clf = Pipeline(steps=[
+                ('preprocessor', preprocessor),
+                ('classifier', RandomForestClassifier(n_estimators=100, random_state=42))
+            ])
+            
+            clf.fit(X_train, y_train)
+            
+            # Make predictions and evaluate
+            y_pred = clf.predict(X_test)
+            accuracy = accuracy_score(y_test, y_pred)
+            precision = precision_score(y_test, y_pred, average='weighted')
+            recall = recall_score(y_test, y_pred, average='weighted')
+            
+            # Generate model name if not provided
+            if model_name is None:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                model_name = f"classifier_{dataset_id}_{timestamp}"
+            
+            # Save the model
+            model_path = os.path.join(self.models_dir, f"{model_name}.pkl")
+            with open(model_path, 'wb') as f:
+                pickle.dump(clf, f)
+            
+            # Save model metadata
+            model_info = {
+                'model_name': model_name,
+                'model_type': 'classifier',
+                'dataset_id': dataset_id,
+                'dataset_version': version,
+                'target_column': target_column,
+                'features': features,
+                'training_date': datetime.now().isoformat(),
+                'metrics': {
+                    'accuracy': accuracy,
+                    'precision': precision,
+                    'recall': recall
+                }
+            }
+            
+            # Save model metadata
+            metadata_path = os.path.join(self.models_dir, f"{model_name}_metadata.json")
+            with open(metadata_path, 'w') as f:
+                json.dump(model_info, f, indent=2)
+            
+            return model_info
+        
+        except Exception as e:
+            self.logger.error(f"Classification model training error: {e}")
+            return {'error': str(e)}
+    
+    def train_regressor(self, dataset_id: int, target_column: str,
+                       features: List[str] = None, model_name: str = None,
+                       version: int = None) -> Dict[str, Any]:
+        """
+        Train a regression model on the dataset
+        
+        Args:
+            dataset_id: ID of the dataset to use
+            target_column: Column to predict
+            features: List of feature columns
+            model_name: Name to save the model
+            version: Specific dataset version to use
+            
+        Returns:
+            Dictionary with model info and metrics
+        """
+        try:
+            # Prepare data
+            X_train, X_test, y_train, y_test = self.prepare_data(
+                dataset_id, target_column, features, version=version
+            )
+            
+            # Determine feature types
+            categorical_features = X_train.select_dtypes(include=['object', 'category']).columns.tolist()
+            numeric_features = X_train.select_dtypes(include=['int64', 'float64']).columns.tolist()
+            
+            # Create preprocessing for categorical and numeric features
+            preprocessor = ColumnTransformer(
+                transformers=[
+                    ('num', StandardScaler(), numeric_features),
+                    ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
+                ]
+            )
+            
+            # Create and train the pipeline
+            reg = Pipeline(steps=[
+                ('preprocessor', preprocessor),
+                ('regressor', GradientBoostingRegressor(n_estimators=100, random_state=42))
+            ])
+            
+            reg.fit(X_train, y_train)
+            
+            # Make predictions and evaluate
+            y_pred = reg.predict(X_test)
+            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+            r2 = r2_score(y_test, y_pred)
+            
+            # Generate model name if not provided
+            if model_name is None:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                model_name = f"regressor_{dataset_id}_{timestamp}"
+            
+            # Save the model
+            model_path = os.path.join(self.models_dir, f"{model_name}.pkl")
+            with open(model_path, 'wb') as f:
+                pickle.dump(reg, f)
+            
+            # Save model metadata
+            model_info = {
+                'model_name': model_name,
+                'model_type': 'regressor',
+                'dataset_id': dataset_id,
+                'dataset_version': version,
+                'target_column': target_column,
+                'features': features,
+                'training_date': datetime.now().isoformat(),
+                'metrics': {
+                    'rmse': rmse,
+                    'r2': r2
+                }
+            }
+            
+            metadata_path = os.path.join(self.models_dir, f"{model_name}_metadata.json")
+            with open(metadata_path, 'w') as f:
+                json.dump(model_info, f, indent=2)
+            
+            return model_info
+        
+        except Exception as e:
+            self.logger.error(f"Regression model training error: {e}")
+            return {'error': str(e)}
+    
+    def predict(self, model_name: str, data: List[Dict[str, Any]]) -> List[Any]:
+        """
+        Make predictions using a trained model
+        
+        Args:
+            model_name: Name of the trained model
+            data: List of records to predict
+            
+        Returns:
+            List of predictions
+        """
+        try:
+            # Load the model
+            model_path = os.path.join(self.models_dir, f"{model_name}.pkl")
+            with open(model_path, 'rb') as f:
+                model = pickle.load(f)
+            
+            # Load model metadata
+            metadata_path = os.path.join(self.models_dir, f"{model_name}_metadata.json")
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            
+            # Convert input data to DataFrame
+            df = pd.DataFrame(data)
+            
+            # Ensure all required features are present
+            required_features = metadata['features']
+            missing_features = [f for f in required_features if f not in df.columns]
+            
+            if missing_features:
+                raise ValueError(f"Missing required features: {missing_features}")
+            
+            # Make predictions
+            predictions = model.predict(df[required_features])
+            
+            return predictions.tolist()
+        
+        except Exception as e:
+            self.logger.error(f"Prediction error: {e}")
+            return []
+    
+    def list_models(self) -> List[Dict[str, Any]]:
+        """
+        List all trained models with their metadata
+        
+        Returns:
+            List of model metadata
+        """
+        models = []
+        
+        try:
+            for filename in os.listdir(self.models_dir):
+                if filename.endswith("_metadata.json"):
+                    filepath = os.path.join(self.models_dir, filename)
+                    with open(filepath, 'r') as f:
+                        metadata = json.load(f)
+                        models.append(metadata)
+            
+            return models
+        
+        except Exception as e:
+            self.logger.error(f"Error listing models: {e}")
+            return []
+
+# Example usage
+if __name__ == "__main__":
+    from database.database_module import PesoDatabase
+    
+    # Initialize database and ML engine
+    db = PesoDatabase()
+    ml_engine = MLPredictionEngine(db)
+    
+    # Train a classifier (assuming dataset 1 exists with appropriate columns)
+    model_info = ml_engine.train_classifier(
+        dataset_id=1,
+        target_column="industry",
+        features=["country", "email"]
+    )
+    
+    print(json.dumps(model_info, indent=2))
+    
+    # Make predictions on new data
+    new_data = [
+        {"country": "USA", "email": "test@example.com"},
+        {"country": "UK", "email": "uk@example.com"}
+    ]
+    
+    predictions = ml_engine.predict(model_info['model_name'], new_data)
+    print(f"Predictions: {predictions}")
